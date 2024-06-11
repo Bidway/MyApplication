@@ -51,12 +51,14 @@ public class DataActivity extends AppCompatActivity {
     private ArrayAdapter<String> adapterPath;
     private SeekBar seekBarStopFullness;
     private AutoCompleteTextView autoCompleteTextViewPathNumber;
-    TextView textFixation,textViewChooseTransport,textViewChooseTransportFullness;
+    private TextView textFixation,textViewChooseTransport,textViewChooseTransportFullness;
     private SharedPreferences sharedStops;
+    private FileManager fileManager;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_data);
+        fileManager =new FileManager();
         sharedStops = getSharedPreferences("Stops",MODE_PRIVATE);
         SharedPreferences sharedDataPause = getSharedPreferences("DataPause", Context.MODE_PRIVATE);
         SharedPreferences.Editor editorDataPause = sharedDataPause.edit();
@@ -80,7 +82,6 @@ public class DataActivity extends AppCompatActivity {
         findViewById(R.id.buttonClearData).setOnClickListener(view -> clearFields());
         imageView.setOnClickListener(view -> makePhoto());
 
-        //заполненость остановки
         seekBarStopFullness.setMax(45);
         seekBarStopFullness.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
@@ -284,7 +285,8 @@ public class DataActivity extends AppCompatActivity {
         if (requestCode == 1 && resultCode == RESULT_OK) {
             Bitmap image = (Bitmap) data.getExtras().get("data");
             imageView.setImageBitmap(image);
-            File pictureFile = getOutputMediaFile();
+//            File pictureFile = getOutputMediaFile();
+            File pictureFile = fileManager.getOutputMediaFile(DataActivity.this,timeStamp);
             if (pictureFile != null) {
                 try (FileOutputStream fos = new FileOutputStream(pictureFile)) {
                     image.compress(Bitmap.CompressFormat.JPEG, 100, fos);
@@ -328,7 +330,6 @@ public class DataActivity extends AppCompatActivity {
             Intent cameraIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
             startActivityForResult(cameraIntent, 1);
         } else {
-            //Request camera permission if we don't have it.
             requestPermissions(new String[]{Manifest.permission.CAMERA}, 100);
         }
     }
@@ -400,7 +401,6 @@ public class DataActivity extends AppCompatActivity {
     }
     private void createCSVFile() {
         if(checkFields()) {
-            try {
                 if(timeStamp==0)
                     timeStamp = System.currentTimeMillis();
                 ActivityCompat.requestPermissions(this, new String[]{
@@ -413,53 +413,18 @@ public class DataActivity extends AppCompatActivity {
                     latitude = l.getLatitude();
                     longitude = l.getLongitude();
                     altitude = l.getAltitude();
-//                    Toast.makeText(getApplicationContext(), "Широта: " + latitude + "\nДолгота: " + longitude, Toast.LENGTH_LONG).show();
                 } else {
                     Toast.makeText(getApplicationContext(), "Не удалось получить местоположение", Toast.LENGTH_LONG).show();
                 }
-                SharedPreferences sharedPreferences = getSharedPreferences("Saves", Context.MODE_PRIVATE);
-                SharedPreferences sharedPreferencesID = getSharedPreferences("UserInfo", Context.MODE_PRIVATE);
-                SharedPreferences.Editor editor = sharedPreferences.edit();
-
-                Map<String, ?> allEntries = sharedPreferences.getAll();
-                int sizeKeys = allEntries.size();
-                editor.putString(String.valueOf(sizeKeys), sharedPreferencesID.getString("surname", "") + "_" + timeStamp);
-                editor.apply();
-
-                java.io.File csvFileDir = new File(Environment.getExternalStoragePublicDirectory(
-                        Environment.DIRECTORY_DOCUMENTS), "MyAppFolder");
-                if (!csvFileDir.exists()) {
-                    if (!csvFileDir.mkdirs()) {
-                        Toast.makeText(DataActivity.this, "Не удалось создать", Toast.LENGTH_SHORT).show();
-                    }
-                }
-                java.io.File csvFile = new java.io.File(csvFileDir.getPath() + java.io.File.separator +
-                        sharedPreferencesID.getString("surname", "") + "_" + timeStamp + ".csv");
-                if (!csvFile.exists()) {
-                    csvFile.createNewFile();
-                    FileWriter writer = new FileWriter(csvFile);
-                    writer.append("Время" + "," + "Индетификатор" + "," + "Название остановки" + "," +"Название следующей остановки "+","+ "GPS-широта" + "," + "GPS-долгота" + "," +
-                            "Высота места над уровнем моря" + "," + "Число пассажиров на остановке" + "," + "Номер маршрута транспортного средства" +
-                            "," + "Тип транспорта" + "," + "Степень заполненности транспортного средства" + "," + "Число вошедших пассажиров" + "," + "Число вышедших пассажиров" + "\n");
-                    writer.append(String.valueOf(timeStamp)).append(",").append(sharedPreferencesID.getString("surname", "")).append(",").
-                            append(sharedStops.getString("stop","")).append(",").append(sharedStops.getString("nextStop","")).
-                            append(",").append(String.valueOf(latitude)).append(",").append(String.valueOf(longitude)).
-                            append(",").append(String.valueOf(altitude)).append(",").append(textViewProgress.getText().toString().split(" ")[1]).
-                            append(",").append(autoCompleteTextViewPathNumber.getText().toString()).append(",").append(spinnerTransport.getSelectedItem().toString()).append(",").
-                            append(spinnerTransportFullness.getSelectedItem().toString()).append(",").append(editTextPassengersOut.getText().toString()).
-                            append(",").append(editTextPassengersIn.getText().toString());
-                    writer.close();
-                    SharedPreferences sharedHistoryInfo = getSharedPreferences("HistoryInfo",Context.MODE_PRIVATE);
-                    SharedPreferences.Editor editor2 = sharedHistoryInfo.edit();
-                    int saved = sharedHistoryInfo.getInt("Saved",0)+1;
-                    editor2.putInt("Saved",saved);
-                    editor2.apply();
-                    Toast.makeText(DataActivity.this, "Фиксация сохранена", Toast.LENGTH_SHORT).show();
+                double[] dataGPS = {latitude,longitude,altitude};
+                String[] dataText = {textViewProgress.getText().toString().split(" ")[1],
+                        autoCompleteTextViewPathNumber.getText().toString(),
+                        spinnerTransport.getSelectedItem().toString(),
+                        spinnerTransportFullness.getSelectedItem().toString(),
+                        editTextPassengersOut.getText().toString(),
+                        editTextPassengersIn.getText().toString()};
+                fileManager.createCSVFile(DataActivity.this,String.valueOf(timeStamp),dataGPS,dataText);
                     clearFields();
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
         }else {
             Toast.makeText(DataActivity.this, "Заполните все поля", Toast.LENGTH_SHORT).show();
         }
